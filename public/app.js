@@ -778,7 +778,8 @@ document.addEventListener('DOMContentLoaded', () => {
             budget: document.getElementById('budget-select')?.value || 'accessible',
             fragrance: document.getElementById('fragrance-pref')?.value || 'fragrance-free',
             sensitivity: document.getElementById('sensitivity-pref')?.value || 'none',
-            complexity: document.getElementById('complexity-pref')?.value || 'simple'
+            complexity: document.getElementById('complexity-pref')?.value || 'simple',
+            isDemo: !!analysisResultData.isDemo
           })
         });
 
@@ -877,7 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
               metrics: validMetrics,
               skinType: skinTypeSelect?.value || 'balanced',
               concern: primaryConcern?.value || 'glow'
-            }
+            },
+            isDemo: !!analysisResultData?.isDemo
           })
         });
 
