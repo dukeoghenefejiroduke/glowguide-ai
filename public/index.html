@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlowGuide AI — Your Personal Skincare Intelligence Companion</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-area">
+        <span class="logo-icon">✨</span>
+        <h1 class="logo-text">GlowGuide <span class="gradient-text">AI</span></h1>
+      </div>
+      <div class="hackathon-badge">
+        <span>🏆 YouCam API Hackathon</span>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- HERO / UPLOAD SCREEN -->
+      <section id="upload-section" class="screen active">
+        <div class="hero-card">
+          <div class="hero-tag">AI-Powered Dermatology Intelligence</div>
+          <h2>Decode Your Skin's Unique Story</h2>
+          <p class="hero-subtitle">Powered by the real-time YouCam Skin Analysis API. Get professional clinical-grade metrics for acne, pores, oiliness, and skin age in seconds.</p>
+
+          <div class="upload-dropzone" id="dropzone">
+            <input type="file" id="file-input" accept="image/png, image/jpeg, image/jpg" hidden>
+            <input type="file" id="camera-input" accept="image/*" capture="user" hidden>
+            <div class="upload-prompt" id="upload-prompt-content">
+              <div class="upload-icon-circle">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <h3>Upload or Snap a Skin Photo</h3>
+              <p>Supports JPG and PNG up to 10MB. Use a clear, front-facing photo in bright, even lighting.</p>
+              <div class="photo-guidance" role="note">
+                <strong>📸 Important for accurate scanning</strong>
+                <ul>
+                  <li>Use a close-up: your face must occupy more than 60% of the image width.</li>
+                  <li>Keep your forehead, cheeks, nose and chin visible.</li>
+                  <li>Avoid group photos, distant selfies, filters and heavy shadows.</li>
+                  <li>If analysis fails, crop closer to your face and try again.</li>
+                </ul>
+              </div>
+              <div class="upload-buttons">
+                <button type="button" class="btn btn-primary" id="select-file-btn">📁 Choose Photo</button>
+                <button type="button" class="btn btn-accent" id="take-camera-btn">📸 Snap Camera Photo</button>
+                <button type="button" class="btn btn-secondary" id="demo-mode-btn">⚡ Try Instant Demo</button>
+              </div>
+            </div>
+
+            <!-- Preview Container (Initially Hidden) -->
+            <div class="preview-container hidden" id="preview-container">
+              <img id="image-preview" src="" alt="Skin Preview">
+              <div class="preview-info">
+                <span id="file-name">filename.jpg</span>
+                <button type="button" class="btn-text" id="remove-file-btn">Change Photo</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Consent & Preferences -->
+          <div class="form-controls">
+            <!-- Pre-Scan Quality & Face Gate Status -->
+            <div id="quality-gate-card" class="quality-gate-card hidden" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #334155; display: flex; align-items: center; gap: 6px;">
+                <span>🔍</span> Pre-Scan Quality & Face Detection Gate
+              </h4>
+              <div id="quality-gate-checks" style="font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px;">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+
+            <label class="checkbox-label">
+              <input type="checkbox" id="consent-checkbox">
+              <span>I consent to upload this photo for secure AI skin analysis as outlined in the <a href="#privacy-modal" id="privacy-link">Privacy Policy</a>. Photos are not permanently retained.</span>
+            </label>
+
+            <div class="preference-grid">
+              <div class="select-group">
+                <label for="skin-type-select">Skin Type Preference</label>
+                <select id="skin-type-select">
+                  <option value="balanced">Balanced / Normal</option>
+                  <option value="oily">Oily T-Zone</option>
+                  <option value="dry">Dry / Dehydrated</option>
+                  <option value="combination">Combination</option>
+                  <option value="sensitive">Sensitive</option>
+                </select>
+              </div>
+              <div class="select-group">
+                <label for="primary-concern">Primary Goal</label>
+                <select id="primary-concern">
+                  <option value="glow">Radiance & Glow</option>
+                  <option value="acne">Blemish Control</option>
+                  <option value="pore">Pore Refinement</option>
+                  <option value="hydration">Deep Hydration</option>
+                  <option value="aging">Anti-Aging & Firmness</option>
+                </select>
+              </div>
+              <div class="select-group">
+                <label for="budget-select">Budget Preference</label>
+                <select id="budget-select">
+                  <option value="accessible">Accessible / Drugstore ($)</option>
+                  <option value="mid">Mid-Range ($$)</option>
+                  <option value="premium">Clinical / Premium ($$$)</option>
+                </select>
+              </div>
+              <div class="select-group">
+                <label for="fragrance-pref">Formula Preference</label>
+                <select id="fragrance-pref">
+                  <option value="fragrance-free">Fragrance-Free (Recommended)</option>
+                  <option value="any">Standard Formulation</option>
+                </select>
+              </div>
+              <div class="select-group">
+                <label for="sensitivity-pref">Skin Sensitivities</label>
+                <select id="sensitivity-pref">
+                  <option value="none">None / Normal Barrier</option>
+                  <option value="sensitive">Easily Irritated / Reactive</option>
+                  <option value="retinol-sensitive">Retinol / Acid Sensitive</option>
+                </select>
+              </div>
+              <div class="select-group">
+                <label for="complexity-pref">Routine Complexity</label>
+                <select id="complexity-pref">
+                  <option value="simple">Essential (3-Step Fast)</option>
+                  <option value="comprehensive">Comprehensive (Full Routine)</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" class="btn btn-accent btn-full" id="analyze-btn" disabled>
+              Analyze Skin with YouCam AI 🚀
+            </button>
+          </div>
+        </div>
+
+        <!-- Value Prop Cards -->
+        <div class="features-grid">
+          <div class="feature-card">
+            <span class="feat-icon">🔬</span>
+            <h4>Real YouCam API</h4>
+            <p>Direct integration with Perfect Corp's industry-leading AI models.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feat-icon">🛡️</span>
+            <h4>Privacy First</h4>
+            <p>Zero retention policy. Images are analyzed securely and immediately discarded.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feat-icon">💡</span>
+            <h4>Actionable Routine</h4>
+            <p>Custom AM/PM skincare intelligence tailored to your exact metrics.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOADING / SCANNING SCREEN -->
+      <section id="loading-section" class="screen">
+        <div class="loading-card">
+          <div class="scanner-wrapper">
+            <div class="scanner-img-box">
+              <img id="loading-image" src="" alt="Analyzing">
+              <div class="scanner-laser"></div>
+            </div>
+          </div>
+          <h3 id="loading-title">Analyzing Your Skin...</h3>
+          <p id="loading-step-text" class="loading-subtitle">Communicating with YouCam Skin AI API...</p>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+          </div>
+          <p class="disclaimer-text">Detecting facial features, pore density, and sebum balance.</p>
+        </div>
+      </section>
+
+      <!-- DASHBOARD / RESULTS SCREEN -->
+      <section id="dashboard-section" class="screen">
+        <div class="dashboard-header">
+          <div>
+            <h2>Your Skin Intelligence Report</h2>
+            <p id="analysis-timestamp" class="sub-date">Analyzed just now via YouCam AI</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline" id="copy-report-btn">📋 Copy Report</button>
+            <button type="button" class="btn btn-outline" id="new-analysis-btn">🔄 New Analysis</button>
+          </div>
+        </div>
+
+        <!-- Demo Banner (if demo mode) -->
+        <div id="demo-banner" class="demo-banner hidden">
+          <span>⚠️ <strong>Demo Mode Active:</strong> Showing verified sample YouCam metrics. Configure your YOUCAM_API_KEY in `.env` for live camera analysis.</span>
+        </div>
+
+        <!-- Summary Score Card -->
+        <div class="summary-hero-card">
+          <div class="score-circle-wrapper">
+            <div class="score-ring">
+              <span id="overall-score-val" class="score-number">82</span>
+              <span class="score-label">Overall Score</span>
+            </div>
+          </div>
+          <div class="summary-details">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+              <div class="skin-age-pill">
+                <span>Estimated Skin Age: <strong id="skin-age-val">26</strong> yrs</span>
+              </div>
+              <div class="skin-age-pill" id="progress-pill" style="background: #f0fdf4; color: #065f46; border: 1px solid #bbf7d0;">
+                <span id="progress-text">📈 Baseline Scan Saved</span>
+              </div>
+            </div>
+            <h3>Overall Condition: Healthy & Balanced</h3>
+            <p id="summary-narrative">Your skin shows excellent resilience and minimal blemishes. Focus on targeted pore refinement in the T-zone and moisture lock for outer cheeks.</p>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <h3 class="section-title">Clinical Metric Breakdown</h3>
+        <div class="metrics-grid" id="metrics-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Active Ingredient Matcher -->
+        <div class="ingredient-match-card" id="ingredient-match-section" style="background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #bbf7d0; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="font-size: 24px;">🧪</span>
+            <div>
+              <h3 style="margin: 0; font-size: 18px; color: #065f46;">Targeted Active Ingredient Matcher</h3>
+              <p style="margin: 0; font-size: 13px; color: #047857;">Recommended by your YouCam metrics & skin goals</p>
+            </div>
+          </div>
+          <div id="ingredient-match-content" style="font-size: 14px; color: #1f2937; line-height: 1.5;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- eCommerce Product Category Comparison Guide -->
+        <div class="ecommerce-guide-card" id="ecommerce-guide-section" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid #bfdbfe; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="font-size: 24px;">🛍️</span>
+            <div>
+              <h3 style="margin: 0; font-size: 18px; color: #1e40af;">E-Commerce VTO Formulation Guide</h3>
+              <p style="margin: 0; font-size: 13px; color: #2563eb;">Category comparison tailored to your budget & sensitivity tier</p>
+            </div>
+          </div>
+          <div id="ecommerce-guide-content" style="font-size: 14px; color: #1f2937; line-height: 1.5;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Personalized Routine Section -->
+        <div class="routine-card">
+          <div class="routine-header">
+            <h3>✨ Your Personalized Skincare Routine</h3>
+            <p>Tailored to your YouCam metrics and selected goals.</p>
+          </div>
+          <div class="routine-tabs">
+            <button class="tab-btn active" data-tab="am">☀️ Morning Routine</button>
+            <button class="tab-btn" data-tab="pm">🌙 Evening Routine</button>
+          </div>
+          <div class="routine-content" id="routine-am-content">
+            <!-- AM Content -->
+          </div>
+          <div class="routine-content hidden" id="routine-pm-content">
+            <!-- PM Content -->
+          </div>
+        </div>
+
+        <!-- Groq AI Skincare Assistant Section -->
+        <div class="groq-ai-card" id="groq-ai-section" style="background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); border: 1px solid #ddd6fe; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">🤖</span>
+              <div>
+                <h3 style="margin: 0; font-size: 18px; color: #5b21b6;">Groq-Powered AI Skincare Assistant</h3>
+                <p style="margin: 0; font-size: 13px; color: #6d28d9;">Optional LLM intelligence based on your verified YouCam metrics</p>
+              </div>
+            </div>
+            <div id="groq-status-badge" style="background: #e2e8f0; color: #475569; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;">Checking Groq Status...</div>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <button type="button" class="btn btn-primary" id="groq-insights-btn" style="background: #7c3aed; border-color: #7c3aed;">✨ Generate Advanced AI Insights (Groq)</button>
+          </div>
+
+          <div id="groq-loading" class="hidden" style="text-align: center; padding: 16px; color: #6d28d9; font-weight: 500;">
+            ⏳ Generating personalized Groq AI insights and routines...
+          </div>
+
+          <div id="groq-insights-container" class="hidden" style="background: #ffffff; border: 1px solid #c4b5fd; border-radius: 12px; padding: 16px; margin-bottom: 16px; font-size: 14px; color: #1f2937; line-height: 1.5;">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Chat Assistant Sub-section -->
+          <div id="groq-chat-wrapper" class="hidden" style="border-top: 1px dashed #c4b5fd; padding-top: 16px; margin-top: 16px;">
+            <h4 style="margin: 0 0 8px 0; font-size: 15px; color: #5b21b6;">💬 Follow-Up Skincare Chat</h4>
+            <div id="groq-chat-messages" style="max-height: 250px; overflow-y: auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+              <div style="color: #6b7280; font-style: italic;">Ask any follow-up question about your skin metrics, product layering, or routines...</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="groq-chat-input" placeholder="e.g. Can I use niacinamide with vitamin C?" style="flex: 1; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;">
+              <button type="button" class="btn btn-primary" id="groq-chat-send-btn" style="background: #7c3aed; border-color: #7c3aed;">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy & Actions Footer -->
+        <div class="dashboard-footer-actions">
+          <button type="button" class="btn btn-danger" id="discard-photo-btn">🗑️ Discard Photo & Reset Data</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Privacy Modal -->
+    <div class="modal-backdrop hidden" id="privacy-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Privacy & Data Security Policy</h3>
+          <button type="button" class="close-modal-btn" id="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p><strong>GlowGuide AI</strong> respects your personal privacy. Here is how your data is handled:</p>
+          <ul>
+            <li><strong>Zero Retention:</strong> Uploaded photos are sent securely to the YouCam API for analysis and are immediately discarded. We do not store or sell facial imagery.</li>
+            <li><strong>Non-Medical Disclaimer:</strong> GlowGuide AI provides cosmetic insights and general skincare education. Results are not medical diagnoses and should not replace professional dermatological advice.</li>
+            <li><strong>Secure API Transmission:</strong> All requests use encrypted HTTPS channels directly with Perfect Corp's verified infrastructure.</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="accept-modal">Understood</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>GlowGuide AI • YouCam API Hackathon Entry • Built for Android & Web</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

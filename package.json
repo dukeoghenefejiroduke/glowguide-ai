@@ -1,0 +1,21 @@
+{
+  "name": "glowguide-ai",
+  "version": "1.0.0",
+  "description": "GlowGuide AI — Your Personal Skincare Intelligence Companion (YouCam API Hackathon Entry)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env server.js || node server.js"
+  },
+  "keywords": [
+    "youcam",
+    "skin-analysis",
+    "hackathon",
+    "ai",
+    "skincare",
+    "ecommerce"
+  ],
+  "author": "GlowGuide AI Team",
+  "license": "MIT",
+  "dependencies": {}
+}
