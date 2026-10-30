@@ -5,7 +5,7 @@
 ---
 
 ## 🏆 Project Overview
-**GlowGuide AI** is an advanced dermatology intelligence web application that integrates directly with the real-time **YouCam Skin Analysis API** (by Perfect Corp) and optional **Groq LLM AI Intelligence** (via native Node.js fetch). It bridges the gap between raw clinical metrics (acne, pores, oiliness, redness, texture, and moisture) and actionable consumer understanding—empowering users to decode their skin condition, receive tailored skincare education, and generate custom AM/PM skincare routines.
+**GlowGuide AI** is an advanced dermatology intelligence web application that integrates directly with the real-time **YouCam Skin Analysis API** (by Perfect Corp) and optional **Groq LLM AI Intelligence** (via native Node.js fetch). It bridges the gap between raw clinical metrics (acne, pores, oiliness, redness, texture, moisture, and firmness) and actionable consumer understanding—empowering users to decode their skin condition, receive tailored skincare education, and generate custom AM/PM skincare routines.
 
 ---
 
@@ -13,10 +13,10 @@
 
 | Judging Criterion | GlowGuide AI Implementation & Evidence |
 | :--- | :--- |
-| **Technical Innovation** | Implements Perfect Corp's official 4-step server-to-server API workflow: File Upload Initialization ➔ Pre-signed S3 Binary Upload ➔ Task Creation ➔ Exponential Backoff Status Polling, plus optional Groq AI insights & chat. |
+| **Technical Innovation** | Implements Perfect Corp's official 4-step server-to-server API workflow: File Upload Initialization ➔ Pre-signed S3 Binary Upload ➔ Task Creation ➔ Exponential Backoff Status Polling, robust live metric mapping (`surface_smoothness`, `pore_refinement`, `sebum_and_oil_balance`, `tone_and_redness`, etc.), plus optional Groq AI insights & chat. |
 | **Product Utility & UX** | Translates complex numerical scores into plain-language educational insights, estimated skin age, Targeted Active Ingredient Matches, E-Commerce VTO Formulation Guides, interactive AM/PM routine checklists, and Groq-powered AI coaching. |
 | **Reliability & Fallbacks** | Features robust graceful fallback to deterministic sample metrics (Demo Mode) when API keys are unset, ensuring judges can evaluate core features instantly without setup friction. Groq AI is entirely optional. |
-| **Privacy & Security** | Strict environment variable API key isolation, 10MB payload size limits, MIME type validation, `Cache-Control: no-store` headers, an automatic 60-second inactivity privacy timer, and strict AI data boundaries (facial images never touch Groq). |
+| **Privacy & Security** | Strict environment variable API key isolation, server-side `analysisId` source provenance validation, 10MB payload size limits, MIME type validation, `Cache-Control: no-store` headers, an automatic 60-second inactivity privacy timer, and strict AI data boundaries (facial images never touch Groq). |
 
 ---
 
@@ -29,9 +29,13 @@ GlowGuide AI uses a high-performance **Node.js native HTTP server** (zero extern
 3. **Task Creation:** Submits skin analysis task (`POST /s2s/v2.0/task/skin-analysis`) requesting acne, pore, oiliness, redness, texture, and wrinkle metrics.
 4. **Asynchronous Polling:** Polls task status (`GET /s2s/v2.0/task/skin-analysis/{taskId}`) using intelligent exponential backoff delays (`2s, 2s, 3s, 5s...`) until completion, returning verified clinical scores.
 
-### 2. Optional Groq AI Integration (`server.js` & `app.js`):
+### 2. Server-Side Data Provenance (`server.js`):
+- Analysis results are stored securely in memory with a 1-hour expiry and assigned an opaque `analysisId`.
+- AI insight and chat requests reference `analysisId`. The server independently verifies source provenance (`isDemo`) and authoritative metrics from the server record, preventing client tampering or record spoofing.
+
+### 3. Optional Groq AI Integration (`server.js` & `app.js`):
 - **Endpoints:** `GET /api/ai/status`, `POST /api/ai/insights`, `POST /api/ai/chat`.
-- **Protocol:** Native Node.js `fetch` with `AbortController` (10s timeout), token output limits (`max_tokens: 1000`), and sanitized error handling.
+- **Protocol:** Native Node.js `fetch` with `AbortController` (10s timeout), token output limits (`max_tokens: 2048`), and sanitized error handling.
 - **Configurable Model:** Controlled via `GROQ_MODEL` environment variable (defaulting to `openai/gpt-oss-20b`).
 
 ---
@@ -45,6 +49,7 @@ GlowGuide AI uses a high-performance **Node.js native HTTP server** (zero extern
 6. **Exportable Skin Report Card:** One-click clipboard sharing (`📋 Copy Report`).
 7. **Local Progress Tracker:** Automatically saves scan scores in `localStorage` and compares scores across scans.
 8. **Groq AI Assistant & Chat:** On-demand advanced AI coaching and follow-up skincare Q&A.
+9. **AI Skin Analysis Visual Results Gallery & Secure Proxy:** Displays user-captured session photos and YouCam provider visual assets (when supported by task responses) in a dedicated visual results card, secured via a server-side image proxy (`/api/image-proxy`) enforcing HTTPS, domain whitelisting (`.makeupar.com`, `.amazonaws.com`), content-type checking, and 15MB size limits.
 
 ---
 
@@ -99,6 +104,6 @@ GlowGuide AI uses a high-performance **Node.js native HTTP server** (zero extern
 ---
 
 ## 📦 Verified Test Results & Limitations
-- **Automated Tests:** 9/9 tests passing (`node --test test.js`) covering server health, static assets, demo endpoints, score validation, input validation, and Groq status/error handling without network calls.
+- **Automated Tests:** 15/15 tests passing (`node --test test.js`) covering server health, static assets, demo endpoints, score validation, input validation, server-side provenance validation (`analysisId`), secure image proxy validation (`/api/image-proxy`), and Groq status/error handling without network calls.
 - **Syntax Check:** Verified clean (`node --check server.js` & `node --check public/app.js`).
 - **Limitations:** Live YouCam analysis and Groq AI features require valid API keys and internet connectivity.

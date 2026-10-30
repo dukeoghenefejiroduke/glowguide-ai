@@ -192,3 +192,17 @@ test('POST /api/ai/insights with invalid analysisId returns 400 Bad Request (pro
     proc3.kill();
   }
 });
+
+test('GET /api/image-proxy without URL parameter returns 400 Bad Request', async () => {
+  const res = await fetch(`${BASE_URL}/api/image-proxy`);
+  assert.strictEqual(res.status, 400);
+  const json = await res.json();
+  assert.ok(json.error);
+});
+
+test('GET /api/image-proxy with forbidden domain or non-HTTPS returns 403 Forbidden', async () => {
+  const res = await fetch(`${BASE_URL}/api/image-proxy?url=http://example.com/test.jpg`);
+  assert.strictEqual(res.status, 403);
+  const json = await res.json();
+  assert.ok(json.error.includes('Forbidden'));
+});

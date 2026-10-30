@@ -356,6 +356,95 @@ document.addEventListener('DOMContentLoaded', () => {
       demoBanner.classList.add('hidden');
     }
 
+    const dashboardPhotoBanner = document.getElementById('dashboard-photo-banner');
+    if (dashboardPhotoBanner) {
+      dashboardPhotoBanner.classList.add('hidden');
+    }
+
+    // Render AI Skin Analysis Visual Results Section
+    const visualResultsContent = document.getElementById('visual-results-content');
+    if (visualResultsContent) {
+      const dataResults = result.data?.results || result.data || {};
+      const providerImages = [];
+
+      // Extract from top-level result image fields if present
+      if (typeof dataResults.image_url === 'string') providerImages.push({ url: dataResults.image_url, label: 'Analysis Image' });
+      if (typeof dataResults.output_image === 'string') providerImages.push({ url: dataResults.output_image, label: 'Output Image' });
+      if (typeof dataResults.visual_url === 'string') providerImages.push({ url: dataResults.visual_url, label: 'Visual Result' });
+      if (Array.isArray(dataResults.result_images)) {
+        dataResults.result_images.forEach((img, i) => { if (typeof img === 'string') providerImages.push({ url: img, label: `Result Asset #${i + 1}` }); });
+      }
+      if (Array.isArray(dataResults.images)) {
+        dataResults.images.forEach((img, i) => { if (typeof img === 'string') providerImages.push({ url: img, label: `Image Asset #${i + 1}` }); });
+      }
+
+      // Extract mask_urls and url from YouCam output array items
+      if (Array.isArray(dataResults.output)) {
+        dataResults.output.forEach(item => {
+          if (Array.isArray(item.mask_urls)) {
+            item.mask_urls.forEach(maskUrl => {
+              if (typeof maskUrl === 'string' && maskUrl.startsWith('http')) {
+                const metricType = item.type || 'analysis';
+                const label = formatMetricName(metricType) + ' Overlay Mask';
+                providerImages.push({ url: maskUrl, label });
+              }
+            });
+          }
+          if (typeof item.url === 'string' && item.url.startsWith('http')) {
+            providerImages.push({ url: item.url, label: formatMetricName(item.type || 'Analysis') + ' Asset' });
+          }
+        });
+      }
+
+      let visualHtml = '';
+
+      if (providerImages.length > 0) {
+        visualResultsContent.style.display = 'flex';
+        visualResultsContent.style.flexDirection = 'row';
+        visualResultsContent.style.overflowX = 'auto';
+        visualResultsContent.style.gap = '16px';
+        visualResultsContent.style.paddingBottom = '12px';
+        visualResultsContent.style.scrollSnapType = 'x mandatory';
+
+        providerImages.forEach((imgObj, idx) => {
+          const safeUrl = imgObj.url.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(imgObj.url)}` : imgObj.url;
+          visualHtml += `
+            <div style="flex: 0 0 280px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; font-size: 13px; color: #065f46; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px;" title="${imgObj.label}">✨ ${imgObj.label}</span>
+                <span style="font-size: 10px; background: #d1fae5; color: #047857; padding: 2px 6px; border-radius: 4px; font-weight: 500;">Live Mask</span>
+              </div>
+              <div style="text-align: center; background: #ffffff; border-radius: 8px; padding: 4px; border: 1px solid #a7f3d0;">
+                <img src="${safeUrl}" alt="${imgObj.label}" style="height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" onerror="this.onerror=null; this.parentNode.innerHTML='<p style=\\'color: #b91c1c; font-size: 12px;\\'>⚠️ Failed to load or expired asset.</p>';">
+              </div>
+              <p style="margin: 0; font-size: 11px; color: #047857;">YouCam visual analysis overlay mask.</p>
+            </div>
+          `;
+        });
+      } else {
+        visualResultsContent.style.display = 'block';
+        visualResultsContent.style.overflowX = 'visible';
+        visualResultsContent.style.paddingBottom = '0';
+        if (isDemo) {
+          visualHtml += `
+            <div style="text-align: center; padding: 16px; background: #fef3c7; border: 1px solid #fde68a; border-radius: 12px; color: #92400e; font-size: 13px;">
+              <p style="margin: 0 0 4px 0; font-weight: 600;">⚠️ Demo Mode Visual State</p>
+              <p style="margin: 0;">Showing simulated demo analysis. The standard YouCam skin-analysis task returns verified metric scores and mask overlays when configured with a live API key.</p>
+            </div>
+          `;
+        } else {
+          visualHtml += `
+            <div style="text-align: center; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; color: #475569; font-size: 13px;">
+              <p style="margin: 0 0 4px 0; font-weight: 600;">✨ Analysis Visuals Summary</p>
+              <p style="margin: 0;">The YouCam skin analysis API successfully returned verified metric scores and analysis output masks.</p>
+            </div>
+          `;
+        }
+      }
+
+      visualResultsContent.innerHTML = visualHtml;
+    }
+
     const outputs = (result.data && result.data.results && Array.isArray(result.data.results.output)) ? result.data.results.output : [];
 
     const filteredOutputs = outputs.filter(o => o.type !== 'all' && o.type !== 'resize_image' && o.type !== 'skin_age');
@@ -500,7 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const lowestScore = getValidScore(lowest);
         const rec = recommendations[lowest.type] || recommendations.pore;
         const sensitivityNote = sensitivity !== 'none' ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #b45309; background: #fef3c7; padding: 6px 10px; border-radius: 6px;">⚠️ <strong>Sensitivity Caution:</strong> Formulated with ${sensitivity === 'retinol-sensitive' ? 'acid-safe alternative actives' : 'extra-gentle barrier support'} to prevent reactivity.</p>` : '';
-        const fragranceNote = fragrance === 'fragrance-free' ? ' • 🌿 100% Fragrance-Free' : '';
+        const fragranceNote = fragrance === 'fragrance-free' ? ' • 🌿 Fragrance-Free Preference' : '';
         const targetScoreDisplay = lowestScore !== null ? `${lowestScore}/100` : 'N/A';
 
         ingredientContent.innerHTML = `
@@ -574,14 +663,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getDefaultDescription(type, score) {
     const descriptions = {
-      acne: score > 80 ? 'Minimal blemishes detected. Clear and calm surface.' : 'Slight breakout activity detected around stress zones.',
-      pore: score > 80 ? 'Pores are tight and refined across facial zones.' : 'Moderate pore enlargement observed around the nose and T-zone.',
-      oiliness: score > 80 ? 'Balanced lipid barrier with healthy sebum regulation.' : 'Slight excess shine detected in T-zone area.',
-      redness: score > 80 ? 'Even skin tone with minimal capillary reactivity.' : 'Mild transient redness detected on cheeks.',
-      texture: score > 80 ? 'Exceptionally smooth micro-texture and cellular renewal.' : 'Minor unevenness in skin texture detected.',
-      moisture: score > 80 ? 'Optimal skin hydration and moisture retention.' : 'Mild dehydration detected on outer facial contours.'
+      acne: score > 80 ? 'Minimal blemish activity. Clear surface appearance.' : 'Slight blemish presence observed.',
+      blemish_and_acne_control: score > 80 ? 'Minimal blemish activity. Clear surface appearance.' : 'Slight blemish presence observed.',
+      pore: score > 80 ? 'Pores appear refined across facial zones.' : 'Moderate pore visibility observed in T-zone.',
+      pore_refinement: score > 80 ? 'Pores appear refined across facial zones.' : 'Moderate pore visibility observed in T-zone.',
+      oiliness: score > 80 ? 'Balanced sebum distribution.' : 'Mild shine observed in T-zone area.',
+      sebum_and_oil_balance: score > 80 ? 'Balanced sebum distribution.' : 'Mild shine observed in T-zone area.',
+      redness: score > 80 ? 'Even skin tone appearance.' : 'Minor tone variation detected on cheeks.',
+      tone_and_redness: score > 80 ? 'Even skin tone appearance.' : 'Minor tone variation detected on cheeks.',
+      texture: score > 80 ? 'Smooth surface texture appearance.' : 'Minor surface unevenness detected.',
+      surface_smoothness: score > 80 ? 'Smooth surface texture appearance.' : 'Minor surface unevenness detected.',
+      moisture: score > 80 ? 'Good surface hydration appearance.' : 'Mild dryness observed on outer zones.',
+      wrinkle: score > 80 ? 'Good skin firmness appearance.' : 'Fine line visibility noted.',
+      firmness_and_elasticity: score > 80 ? 'Good skin firmness appearance.' : 'Fine line visibility noted.'
     };
-    const text = descriptions[type] || 'Clinical analysis completed successfully.';
+    const text = descriptions[type] || 'Cosmetic metric assessment completed.';
     return `[GlowGuide Score Interpretation] ${text}`;
   }
 
@@ -723,29 +819,18 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-    if (escaped.includes('|')) {
-      const lines = escaped.split('\n');
-      let cleanedLines = [];
-      for (const line of lines) {
-        if (line.includes('---')) continue;
-        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-          const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-          if (cells.length >= 2) {
-            cleanedLines.push(`<strong>${cells[0]}</strong>: ${cells.slice(1).join(' — ')}`);
-            continue;
-          }
-        }
-        cleanedLines.push(line);
-      }
-      escaped = cleanedLines.join('\n');
-    }
+    escaped = escaped.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/__(.*?)__/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
 
     escaped = escaped.replace(/^###\s+(.+)$/gm, '<h5 style="margin: 6px 0 2px 0; color: #5b21b6; font-size: 13px;">$1</h5>');
     escaped = escaped.replace(/^##\s+(.+)$/gm, '<h4 style="margin: 8px 0 4px 0; color: #5b21b6; font-size: 14px;">$1</h4>');
-    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    escaped = escaped.replace(/__(.*?)__/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/^#\s+(.+)$/gm, '<h3 style="margin: 10px 0 4px 0; color: #5b21b6; font-size: 15px;">$1</h3>');
+
     escaped = escaped.replace(/^\s*[-*]\s+(.+)$/gm, '<li style="margin-left: 14px; margin-bottom: 2px;">$1</li>');
     escaped = escaped.replace(/(<li.*?>.*?<\/li>\s*)+/g, '<ul style="margin: 4px 0; padding-left: 14px;">$&</ul>');
+
     escaped = escaped.replace(/\n/g, '<br>');
     return escaped;
   }

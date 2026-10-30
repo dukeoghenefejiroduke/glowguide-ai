@@ -201,6 +201,12 @@
           <span>⚠️ <strong>Demo Mode Active:</strong> Showing verified sample YouCam metrics. Configure your YOUCAM_API_KEY in `.env` for live camera analysis.</span>
         </div>
 
+        <!-- Horizontal Analyzed Photo Banner -->
+        <div id="dashboard-photo-banner" class="dashboard-photo-banner hidden" style="margin-bottom: 16px; text-align: center;">
+          <img id="dashboard-analyzed-img" src="" alt="Analyzed Skin Photo" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: var(--radius-md); border: 2px solid var(--primary); box-shadow: var(--shadow-sm);">
+          <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Horizontal Analyzed Image Result</span>
+        </div>
+
         <!-- Summary Score Card -->
         <div class="summary-hero-card">
           <div class="score-circle-wrapper">
@@ -223,8 +229,22 @@
           </div>
         </div>
 
+        <!-- AI Skin Analysis Visual Results Section -->
+        <div class="visual-results-card" id="visual-results-section" style="background: #ffffff; border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="font-size: 24px;">🖼️</span>
+            <div>
+              <h3 style="margin: 0; font-size: 18px; color: var(--text-main);">AI Skin Analysis Visual Results</h3>
+              <p style="margin: 0; font-size: 13px; color: var(--text-muted);">YouCam provider visual assets and analysis summary</p>
+            </div>
+          </div>
+          <div id="visual-results-content" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
         <!-- Metrics Grid -->
-        <h3 class="section-title">Clinical Metric Breakdown</h3>
+        <h3 class="section-title">Cosmetic Skin Metric Breakdown</h3>
         <div class="metrics-grid" id="metrics-grid">
           <!-- Populated by JS -->
         </div>

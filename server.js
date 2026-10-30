@@ -18,17 +18,16 @@ const GROQ_SYSTEM_PROMPT = `You are GlowGuide AI, a professional skincare intell
 CRITICAL SCORING & SECURITY INSTRUCTIONS:
 1. SCORING DIRECTION: On a 0-100 scale, higher scores (e.g., 80-100) represent better skin health, clarity, and quality, while lower scores (0-60) represent areas needing attention. NEVER interpret a high score as severe acne, damage, or condition severity.
 2. ATTRIBUTION: Respect whether the analysis is marked as simulated demo data or live YouCam measurement. If simulated, explicitly state that the advice is an example and not personalized from a real facial analysis.
-3. Provide general skincare education and cosmetic guidance only. NEVER provide medical diagnoses.
-4. Keep recommendations concise, practical, and structured: short summary, what metrics can/cannot tell, simple AM routine, simple routine PM, at most 1-2 optional treatments, and a short safety note (mention patch testing).
+3. Provide general skincare education and conservative cosmetic guidance only. NEVER provide medical diagnoses or unverified clinical claims. Refer ONLY to metrics present in the supplied analysis record.
+4. Keep recommendations concise, practical, and structured: short summary, what metrics can/cannot tell, simple AM routine, simple PM routine, at most 1-2 optional treatments, and a short safety note (mention patch testing).
 5. Return a valid JSON object with keys: "summary" (string), "metric_explanations" (array of strings), "am_routine" (array of objects with title and desc), "pm_routine" (array of objects with title and desc), "ingredient_guidance" (string), "safety_notes" (string).`;
 
 const GROQ_CHAT_SYSTEM_PROMPT = `You are GlowGuide AI, a professional skincare intelligence and cosmetic education assistant.
 CRITICAL SCORING & SECURITY INSTRUCTIONS:
 1. SCORING DIRECTION: On a 0-100 scale, higher scores (80-100) mean better skin health and clarity. Never interpret high scores as severe problems.
 2. If context indicates simulated demo data, remind the user that chat responses are based on example data.
-3. Provide concise, helpful, and conversational skincare education and cosmetic guidance.
-4. Rely only on supplied metrics and preferences. Never provide medical diagnoses.
-5. Keep answers short, friendly, and practical. Do not output raw JSON.`;
+3. Provide concise, helpful, and conversational skincare education and conservative cosmetic guidance. Rely ONLY on supplied metrics and preferences. Never provide medical diagnoses.
+4. Keep answers short, friendly, and practical. Give a practical next step, at most 1-2 optional treatments when appropriate, and a concise safety note. Do not output raw JSON.`;
 
 const ALLOWED_METRIC_TYPES = new Set([
   'all', 'acne', 'pore', 'oiliness', 'redness', 'texture', 'moisture', 'wrinkle',
@@ -337,6 +336,79 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === '/api/image-proxy' && req.method === 'GET') {
+    const imageUrl = parsedUrl.searchParams.get('url');
+    if (!imageUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing image URL parameter.' }));
+      return;
+    }
+
+    let parsedImageUrl;
+    try {
+      parsedImageUrl = new URL(imageUrl);
+    } catch (e) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid image URL format.' }));
+      return;
+    }
+
+    const allowedHostPatterns = [
+      /\.makeupar\.com$/i,
+      /\.amazonaws\.com$/i,
+      /yce-api-01\.makeupar\.com$/i
+    ];
+
+    const isHostAllowed = allowedHostPatterns.some(pattern => pattern.test(parsedImageUrl.hostname));
+    if (parsedImageUrl.protocol !== 'https:' || !isHostAllowed) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden: Image URL domain or protocol not permitted.' }));
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const proxyRes = await fetch(imageUrl, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!proxyRes.ok) {
+        res.writeHead(proxyRes.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Failed to fetch external image (HTTP ${proxyRes.status})` }));
+        return;
+      }
+
+      const contentType = proxyRes.headers.get('content-type') || 'image/jpeg';
+      if (!contentType.startsWith('image/')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid content type returned from remote URL.' }));
+        return;
+      }
+
+      const arrayBuffer = await proxyRes.arrayBuffer();
+      if (arrayBuffer.byteLength > 15 * 1024 * 1024) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Proxy payload too large (>15MB).' }));
+        return;
+      }
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      });
+      res.end(Buffer.from(arrayBuffer));
+    } catch (err) {
+      clearTimeout(timeoutId);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.name === 'AbortError' ? 'Image fetch timed out.' : 'Failed to retrieve image.' }));
+    }
+    return;
+  }
+
   if (pathname === '/api/ai/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -625,8 +697,16 @@ const server = http.createServer(async (req, res) => {
           },
           body: JSON.stringify({
             src_file_id: fileId,
-            dst_actions: ["acne", "pore", "oiliness", "redness", "texture", "wrinkle"],
-            format: "json"
+            dst_actions: [
+              "acne", "dark_circle_v2", "droopy_lower_eyelid", "droopy_upper_eyelid",
+              "eye_bag", "firmness", "moisture", "oiliness", "pore", "radiance",
+              "redness", "age_spot", "texture", "wrinkle", "skin_type", "tear_trough"
+            ],
+            miniserver_args: {
+              enable_mask_overlay: true
+            },
+            format: "json",
+            pf_camera_kit: false
           })
         });
 
