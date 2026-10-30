@@ -358,10 +358,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const outputs = (result.data && result.data.results && Array.isArray(result.data.results.output)) ? result.data.results.output : [];
 
-    // Find overall score and skin age with strict validation
-    const overallObj = outputs.find(o => o.type === 'all') || outputs[0] || {};
-    const overallScore = isValidScore(overallObj.ui_score) ? overallObj.ui_score : (isValidScore(overallObj.raw_score) ? Math.round(overallObj.raw_score) : null);
-    const skinAge = (overallObj.skin_age !== undefined && typeof overallObj.skin_age === 'number' && !isNaN(overallObj.skin_age)) ? overallObj.skin_age : null;
+    const filteredOutputs = outputs.filter(o => o.type !== 'all' && o.type !== 'resize_image' && o.type !== 'skin_age');
+
+    // Extract skin age
+    const skinAgeObj = outputs.find(o => o.type === 'skin_age') || outputs.find(o => o.skin_age !== undefined);
+    const skinAge = skinAgeObj?.skin_age !== undefined ? skinAgeObj.skin_age : (skinAgeObj?.score !== undefined ? Math.round(skinAgeObj.score) : null);
+
+    // Find overall score: check 'all', or average valid scores of filtered outputs
+    const overallObj = outputs.find(o => o.type === 'all');
+    let overallScore = null;
+    if (overallObj) {
+      overallScore = isValidScore(overallObj.ui_score) ? overallObj.ui_score : (isValidScore(overallObj.raw_score) ? Math.round(overallObj.raw_score) : (isValidScore(overallObj.score) ? Math.round(overallObj.score) : null));
+    }
+    if (overallScore === null && filteredOutputs.length > 0) {
+      const validScores = filteredOutputs.map(o => isValidScore(o.ui_score) ? o.ui_score : (isValidScore(o.raw_score) ? Math.round(o.raw_score) : (isValidScore(o.score) ? Math.round(o.score) : null))).filter(s => s !== null);
+      if (validScores.length > 0) {
+        overallScore = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+      }
+    }
 
     overallScoreVal.textContent = overallScore !== null ? overallScore : 'N/A';
     skinAgeVal.textContent = skinAge !== null ? skinAge : 'N/A';
@@ -420,10 +434,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Render metrics grid
     metricsGrid.innerHTML = '';
-    outputs.forEach(metric => {
-      if (metric.type === 'all') return; // skip overall in individual grid
-
-      const score = isValidScore(metric.ui_score) ? metric.ui_score : (isValidScore(metric.raw_score) ? Math.round(metric.raw_score) : null);
+    filteredOutputs.forEach(metric => {
+      const score = isValidScore(metric.ui_score) ? metric.ui_score : (isValidScore(metric.score) ? Math.round(metric.score) : (isValidScore(metric.raw_score) ? Math.round(metric.raw_score) : null));
       const badgeColor = score !== null ? (score >= 80 ? 'var(--success)' : score >= 70 ? 'var(--warning)' : 'var(--danger)') : '#94a3b8';
       const badgeBg = score !== null ? (score >= 80 ? '#d1fae5' : score >= 70 ? '#fef3c7' : '#fee2e2') : '#f1f5f9';
       const scoreDisplay = score !== null ? `${score}/100` : 'N/A';
@@ -525,25 +537,37 @@ document.addEventListener('DOMContentLoaded', () => {
   function formatMetricName(type) {
     const names = {
       acne: 'Blemish & Acne Control',
+      blemish_and_acne_control: 'Blemish & Acne Control',
       pore: 'Pore Refinement',
+      pore_refinement: 'Pore Refinement',
       oiliness: 'Sebum & Oil Balance',
+      sebum_and_oil_balance: 'Sebum & Oil Balance',
       redness: 'Tone & Redness',
+      tone_and_redness: 'Tone & Redness',
       texture: 'Surface Smoothness',
+      surface_smoothness: 'Surface Smoothness',
       moisture: 'Hydration Level',
-      wrinkle: 'Firmness & Elasticity'
+      wrinkle: 'Firmness & Elasticity',
+      firmness_and_elasticity: 'Firmness & Elasticity'
     };
-    return names[type] || type;
+    return names[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
 
   function getMetricIcon(type) {
     const icons = {
       acne: '🌿',
+      blemish_and_acne_control: '🌿',
       pore: '🔍',
+      pore_refinement: '🔍',
       oiliness: '💧',
+      sebum_and_oil_balance: '💧',
       redness: '🌸',
+      tone_and_redness: '🌸',
       texture: '✨',
+      surface_smoothness: '✨',
       moisture: '🌊',
-      wrinkle: '⚡'
+      wrinkle: '⚡',
+      firmness_and_elasticity: '⚡'
     };
     return icons[type] || '📊';
   }
@@ -772,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            analysisId: analysisResultData?.analysisId || null,
             metrics: validMetrics,
             skinType: skinTypeSelect?.value || 'balanced',
             concern: primaryConcern?.value || 'glow',
@@ -873,6 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            analysisId: analysisResultData?.analysisId || null,
             messages: chatConversationHistory,
             context: {
               metrics: validMetrics,

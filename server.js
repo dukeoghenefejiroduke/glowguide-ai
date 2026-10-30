@@ -30,7 +30,11 @@ CRITICAL SCORING & SECURITY INSTRUCTIONS:
 4. Rely only on supplied metrics and preferences. Never provide medical diagnoses.
 5. Keep answers short, friendly, and practical. Do not output raw JSON.`;
 
-const ALLOWED_METRIC_TYPES = new Set(['all', 'acne', 'pore', 'oiliness', 'redness', 'texture', 'moisture', 'wrinkle']);
+const ALLOWED_METRIC_TYPES = new Set([
+  'all', 'acne', 'pore', 'oiliness', 'redness', 'texture', 'moisture', 'wrinkle',
+  'surface_smoothness', 'pore_refinement', 'sebum_and_oil_balance', 'tone_and_redness',
+  'blemish_and_acne_control', 'firmness_and_elasticity', 'skin_age', 'resize_image'
+]);
 const ALLOWED_SKIN_TYPES = new Set(['balanced', 'dry', 'oily', 'combination', 'sensitive']);
 const ALLOWED_CONCERNS = new Set(['glow', 'acne', 'anti-aging', 'hydration', 'texture']);
 const ALLOWED_BUDGETS = new Set(['accessible', 'mid', 'premium']);
@@ -43,20 +47,62 @@ function sanitizeString(str, maxLength = 500) {
   return str.trim().slice(0, maxLength);
 }
 
+const analysisRecords = new Map();
+const MAX_ANALYSIS_RECORDS = 100;
+
+function storeAnalysisRecord(record) {
+  if (analysisRecords.size >= MAX_ANALYSIS_RECORDS) {
+    const oldestKey = analysisRecords.keys().next().value;
+    analysisRecords.delete(oldestKey);
+  }
+  const analysisId = 'rec_' + Math.random().toString(36).substring(2, 12) + '_' + Date.now();
+  analysisRecords.set(analysisId, {
+    ...record,
+    createdAt: Date.now()
+  });
+  return analysisId;
+}
+
+function getAnalysisRecord(analysisId) {
+  if (!analysisId || typeof analysisId !== 'string') return null;
+  const record = analysisRecords.get(analysisId);
+  if (!record) return null;
+  if (Date.now() - record.createdAt > 3600000) { // 1 hour expiry
+    analysisRecords.delete(analysisId);
+    return null;
+  }
+  return record;
+}
+
 function validateInsightsPayload(payload, serverHasApiKey) {
   if (!payload || typeof payload !== 'object') return { valid: false, error: 'Invalid request body.' };
-  const { metrics, skinType, concern, budget, fragrance, sensitivity, complexity, isDemo } = payload;
+  let { metrics, skinType, concern, budget, fragrance, sensitivity, complexity, isDemo, analysisId } = payload;
 
-  if (!Array.isArray(metrics) || metrics.length === 0 || metrics.length > 20) {
+  let verifiedIsDemo = serverHasApiKey ? !!isDemo : true;
+  let metricsToUse = metrics;
+
+  if (analysisId) {
+    const record = getAnalysisRecord(analysisId);
+    if (record) {
+      verifiedIsDemo = record.isDemo;
+      if (Array.isArray(record.metrics) && record.metrics.length > 0) {
+        metricsToUse = record.metrics;
+      }
+    } else {
+      return { valid: false, error: 'Invalid, expired, or unknown analysis identifier.' };
+    }
+  }
+
+  if (!Array.isArray(metricsToUse) || metricsToUse.length === 0 || metricsToUse.length > 20) {
     return { valid: false, error: 'Metrics must be a non-empty array of up to 20 items.' };
   }
 
   const sanitizedMetrics = [];
-  for (const m of metrics) {
+  for (const m of metricsToUse) {
     if (!m || typeof m !== 'object' || typeof m.type !== 'string' || !ALLOWED_METRIC_TYPES.has(m.type)) {
       return { valid: false, error: `Invalid or unsupported metric type: ${m?.type}` };
     }
-    const scoreVal = m.ui_score !== undefined ? m.ui_score : m.raw_score;
+    const scoreVal = m.ui_score !== undefined ? m.ui_score : (m.score !== undefined ? m.score : m.raw_score);
     if (scoreVal !== undefined && scoreVal !== null) {
       if (typeof scoreVal !== 'number' || isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
         return { valid: false, error: `Invalid metric score range (must be 0-100): ${scoreVal}` };
@@ -64,8 +110,6 @@ function validateInsightsPayload(payload, serverHasApiKey) {
     }
     sanitizedMetrics.push({ type: m.type, score: scoreVal !== undefined ? scoreVal : null });
   }
-
-  const verifiedIsDemo = serverHasApiKey ? !!isDemo : true;
 
   return {
     valid: true,
@@ -84,7 +128,7 @@ function validateInsightsPayload(payload, serverHasApiKey) {
 
 function validateChatPayload(payload, serverHasApiKey) {
   if (!payload || typeof payload !== 'object') return { valid: false, error: 'Invalid request body.' };
-  const { messages, context, isDemo } = payload;
+  const { messages, context, isDemo, analysisId } = payload;
 
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > 20) {
     return { valid: false, error: 'Messages must be a non-empty array of up to 20 items.' };
@@ -103,7 +147,15 @@ function validateChatPayload(payload, serverHasApiKey) {
     sanitizedMessages.push({ role, content });
   }
 
-  const verifiedIsDemo = serverHasApiKey ? !!isDemo : true;
+  let verifiedIsDemo = serverHasApiKey ? !!isDemo : true;
+  if (analysisId) {
+    const record = getAnalysisRecord(analysisId);
+    if (record) {
+      verifiedIsDemo = record.isDemo;
+    } else {
+      return { valid: false, error: 'Invalid, expired, or unknown analysis identifier.' };
+    }
+  }
 
   return {
     valid: true,
@@ -263,6 +315,7 @@ const server = http.createServer(async (req, res) => {
       status: 'ok',
       app: 'GlowGuide AI',
       hasApiKey: !!API_KEY,
+      groqConfigured: !!GROQ_API_KEY,
       version: '1.0.0'
     }));
     return;
@@ -271,8 +324,16 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/demo' && req.method === 'GET') {
     const skinType = parsedUrl.searchParams.get('skinType') || 'balanced';
     const concern = parsedUrl.searchParams.get('concern') || 'glow';
+    const demoResp = getDeterministicDemoResponse(skinType, concern);
+    const analysisId = storeAnalysisRecord({
+      isDemo: true,
+      results: demoResp.data.results,
+      skinType,
+      concern,
+      metrics: demoResp.data.results?.output || []
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getDeterministicDemoResponse(skinType, concern)));
+    res.end(JSON.stringify({ ...demoResp, analysisId }));
     return;
   }
 
@@ -464,8 +525,16 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (demoMode || !API_KEY) {
+          const demoResp = getDeterministicDemoResponse(skinType, concern);
+          const analysisId = storeAnalysisRecord({
+            isDemo: true,
+            results: demoResp.data.results,
+            skinType: skinType || 'balanced',
+            concern: concern || 'glow',
+            metrics: demoResp.data.results?.output || []
+          });
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(getDeterministicDemoResponse(skinType, concern)));
+          res.end(JSON.stringify({ ...demoResp, analysisId }));
           return;
         }
 
@@ -628,8 +697,16 @@ const server = http.createServer(async (req, res) => {
           throw new Error('Skin analysis task timed out. Please try again or use demo mode.');
         }
 
+        const analysisId = storeAnalysisRecord({
+          isDemo: false,
+          results: finalResult,
+          skinType: skinType || 'balanced',
+          concern: concern || 'glow',
+          metrics: finalResult.results?.output || []
+        });
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ isDemo: false, data: finalResult }));
+        res.end(JSON.stringify({ isDemo: false, data: finalResult, analysisId }));
 
       } catch (err) {
         console.error('[API Error]', err);

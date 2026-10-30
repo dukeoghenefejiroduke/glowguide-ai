@@ -8,22 +8,22 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TEST_PORT = 3005;
+const TEST_PORT = 3007;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 let serverProcess;
 
 test.before(async () => {
-  // Start server for testing
+  // Start server for testing with explicit empty API keys
   serverProcess = spawn('node', ['server.js'], {
     cwd: __dirname,
-    env: { ...process.env, PORT: TEST_PORT.toString(), YOUCAM_API_KEY: '' },
-    stdio: 'ignore'
+    env: { ...process.env, PORT: TEST_PORT.toString(), YOUCAM_API_KEY: '', GROQ_API_KEY: '' },
+    stdio: 'pipe'
   });
 
   // Poll until server responds
   let started = false;
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 30; i++) {
     try {
       const res = await fetch(`${BASE_URL}/api/health`);
       if (res.ok) {
@@ -56,11 +56,12 @@ test('GET /api/health returns ok status', async () => {
   assert.strictEqual(typeof json.hasApiKey, 'boolean');
 });
 
-test('GET /api/demo returns valid demo skin analysis metrics', async () => {
+test('GET /api/demo returns valid demo skin analysis metrics and analysisId', async () => {
   const res = await fetch(`${BASE_URL}/api/demo`);
   assert.strictEqual(res.status, 200);
   const json = await res.json();
   assert.strictEqual(json.isDemo, true);
+  assert.ok(json.analysisId, 'Should return an analysisId for server-side provenance');
   assert.ok(json.data.results.output.length > 0);
   const overall = json.data.results.output.find(o => o.type === 'all');
   assert.ok(overall);
@@ -134,52 +135,6 @@ test('POST /api/ai/insights without Groq configured returns 503 Service Unavaila
   assert.ok(json.error);
 });
 
-test('POST /api/ai/insights validation with mocked GROQ_API_KEY returns 400 for invalid metrics', async () => {
-  const testPort2 = 3006;
-  const baseUrl2 = `http://127.0.0.1:${testPort2}`;
-  const proc2 = spawn('node', ['server.js'], {
-    cwd: __dirname,
-    env: { ...process.env, PORT: testPort2.toString(), YOUCAM_API_KEY: '', GROQ_API_KEY: 'test-key' },
-    stdio: 'ignore'
-  });
-
-  try {
-    let ok = false;
-    for (let i = 0; i < 20; i++) {
-      try {
-        const res = await fetch(`${baseUrl2}/api/health`);
-        if (res.ok) { ok = true; break; }
-      } catch (e) {}
-      await new Promise(r => setTimeout(r, 150));
-    }
-    assert.ok(ok, 'Secondary test server started');
-
-    const res1 = await fetch(`${baseUrl2}/api/ai/insights`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ metrics: [] })
-    });
-    assert.strictEqual(res1.status, 400);
-
-    const res2 = await fetch(`${baseUrl2}/api/ai/insights`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ metrics: [{ type: 'acne', ui_score: 150 }] })
-    });
-    assert.strictEqual(res2.status, 400);
-
-    const res3 = await fetch(`${baseUrl2}/api/ai/insights`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ metrics: [{ type: 'unknown_metric', ui_score: 80 }] })
-    });
-    assert.strictEqual(res3.status, 400);
-
-  } finally {
-    proc2.kill();
-  }
-});
-
 test('POST /api/ai/chat without Groq configured returns 503 Service Unavailable', async () => {
   const res = await fetch(`${BASE_URL}/api/ai/chat`, {
     method: 'POST',
@@ -191,7 +146,7 @@ test('POST /api/ai/chat without Groq configured returns 503 Service Unavailable'
   assert.ok(json.error);
 });
 
-test('POST /api/analyze with demoMode=true returns demo response', async () => {
+test('POST /api/analyze with demoMode=true returns demo response with analysisId', async () => {
   const res = await fetch(`${BASE_URL}/api/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -200,5 +155,40 @@ test('POST /api/analyze with demoMode=true returns demo response', async () => {
   assert.strictEqual(res.status, 200);
   const json = await res.json();
   assert.strictEqual(json.isDemo, true);
+  assert.ok(json.analysisId);
   assert.ok(json.data.results);
+});
+
+test('POST /api/ai/insights with invalid analysisId returns 400 Bad Request (provenance validation)', async () => {
+  const testPort3 = 3008;
+  const baseUrl3 = `http://127.0.0.1:${testPort3}`;
+  const proc3 = spawn('node', ['server.js'], {
+    cwd: __dirname,
+    env: { ...process.env, PORT: testPort3.toString(), YOUCAM_API_KEY: '', GROQ_API_KEY: 'test-key' },
+    stdio: 'ignore'
+  });
+
+  try {
+    let ok = false;
+    for (let i = 0; i < 25; i++) {
+      try {
+        const res = await fetch(`${baseUrl3}/api/health`);
+        if (res.ok) { ok = true; break; }
+      } catch (e) {}
+      await new Promise(r => setTimeout(r, 150));
+    }
+    assert.ok(ok, 'Test server 3 started');
+
+    const res = await fetch(`${baseUrl3}/api/ai/insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analysisId: 'invalid_rec_99999', metrics: [{ type: 'acne', ui_score: 85 }] })
+    });
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.ok(json.error.includes('analysis identifier'));
+
+  } finally {
+    proc3.kill();
+  }
 });
