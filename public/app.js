@@ -50,6 +50,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const closeModal = document.getElementById('close-modal');
   const acceptModal = document.getElementById('accept-modal');
 
+  // Image Lightbox Modal elements
+  const imageModal = document.getElementById('image-modal');
+  const closeImageModal = document.getElementById('close-image-modal');
+  const modalFullscreenImg = document.getElementById('modal-fullscreen-img');
+  const modalFullscreenCaption = document.getElementById('modal-fullscreen-caption');
+
+  function openFullscreenImage(src, captionText) {
+    if (!src) return;
+    modalFullscreenImg.src = src;
+    modalFullscreenCaption.textContent = captionText || 'Full Screen Image View';
+    imageModal.classList.remove('hidden');
+  }
+
+  function closeFullscreenModal() {
+    imageModal.classList.add('hidden');
+    modalFullscreenImg.src = '';
+  }
+
+  if (closeImageModal) {
+    closeImageModal.addEventListener('click', closeFullscreenModal);
+  }
+  if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+      if (e.target === imageModal) closeFullscreenModal();
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (imageModal && !imageModal.classList.contains('hidden')) {
+        closeFullscreenModal();
+      }
+      if (privacyModal && !privacyModal.classList.contains('hidden')) {
+        privacyModal.classList.add('hidden');
+      }
+    }
+  });
+
+  if (imagePreview) {
+    imagePreview.style.cursor = 'pointer';
+    imagePreview.title = 'Click to view full screen';
+    imagePreview.addEventListener('click', () => {
+      openFullscreenImage(imagePreview.src, selectedFileName || 'Skin Photo Preview');
+    });
+  }
+
   let selectedFileBase64 = null;
   let selectedFileName = '';
   let analysisResultData = null;
@@ -414,10 +460,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span style="font-weight: 600; font-size: 13px; color: #065f46; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px;" title="${imgObj.label}">✨ ${imgObj.label}</span>
                 <span style="font-size: 10px; background: #d1fae5; color: #047857; padding: 2px 6px; border-radius: 4px; font-weight: 500;">Live Mask</span>
               </div>
-              <div style="text-align: center; background: #ffffff; border-radius: 8px; padding: 4px; border: 1px solid #a7f3d0;">
-                <img src="${safeUrl}" alt="${imgObj.label}" style="height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" onerror="this.onerror=null; this.parentNode.innerHTML='<p style=\\'color: #b91c1c; font-size: 12px;\\'>⚠️ Failed to load or expired asset.</p>';">
+              <div style="text-align: center; background: #ffffff; border-radius: 8px; padding: 4px; border: 1px solid #a7f3d0; cursor: pointer;" title="Click to view full screen">
+                <img src="${safeUrl}" alt="${imgObj.label}" loading="lazy" style="height: 180px; width: 100%; object-fit: contain; border-radius: 6px; cursor: pointer;" onerror="this.onerror=null; this.parentNode.innerHTML='<p style=\\'color: #b91c1c; font-size: 12px;\\'>⚠️ Failed to load or expired asset.</p>';">
               </div>
-              <p style="margin: 0; font-size: 11px; color: #047857;">YouCam visual analysis overlay mask.</p>
+              <p style="margin: 0; font-size: 11px; color: #047857; cursor: pointer;">Click image to view full screen 🔍</p>
             </div>
           `;
         });
@@ -443,11 +489,38 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       visualResultsContent.innerHTML = visualHtml;
+
+      // Attach click listeners to visual result images for full-screen lightbox
+      const visualImgs = visualResultsContent.querySelectorAll('img');
+      visualImgs.forEach(img => {
+        img.addEventListener('click', () => {
+          openFullscreenImage(img.src, img.alt || 'YouCam Visual Result Asset');
+        });
+      });
+      const visualCards = visualResultsContent.querySelectorAll('div[style*="cursor: pointer"]');
+      visualCards.forEach(card => {
+        card.addEventListener('click', (e) => {
+          const img = card.querySelector('img');
+          if (img) {
+            openFullscreenImage(img.src, img.alt || 'YouCam Visual Result Asset');
+          }
+        });
+      });
     }
 
     const outputs = (result.data && result.data.results && Array.isArray(result.data.results.output)) ? result.data.results.output : [];
 
-    const filteredOutputs = outputs.filter(o => o.type !== 'all' && o.type !== 'resize_image' && o.type !== 'skin_age');
+    const seenMetricTypes = new Set();
+    const filteredOutputs = outputs.filter(o => {
+      if (!o || typeof o !== 'object') return false;
+      const type = o.type;
+      if (!type || ['all', 'resize_image', 'skin_age', 'skin_type'].includes(type)) return false;
+      if (seenMetricTypes.has(type)) return false;
+      const score = getValidScore(o);
+      if (score === null) return false;
+      seenMetricTypes.add(type);
+      return true;
+    });
 
     // Extract skin age
     const skinAgeObj = outputs.find(o => o.type === 'skin_age') || outputs.find(o => o.skin_age !== undefined);
@@ -580,14 +653,29 @@ document.addEventListener('DOMContentLoaded', () => {
         moisture: { active: 'Hyaluronic Acid & Ceramides', benefit: 'Draws ambient moisture deep into epidermal layers while repairing the lipid moisture barrier.', productType: 'Hydrating Essence & Barrier Cream' },
         redness: { active: 'Centella Asiatica & Green Tea Extract', benefit: 'Instantly calms capillary reactivity, reduces flush, and soothes inflammation.', productType: 'Calming Gel Cream' },
         texture: { active: sensitivity === 'sensitive' ? 'PHA (Gluconolactone) - Gentle Exfoliant' : 'Gentle Lactic Acid (AHA)', benefit: 'Encourages gentle cellular turnover for smoother surface micro-texture without irritation.', productType: 'Exfoliating Night Serum' },
-        oiliness: { active: 'Zinc PCA & Niacinamide', benefit: 'Balances T-zone sebum production and reduces shine throughout the day.', productType: 'Oil-Free Mattifying Gel' }
+        oiliness: { active: 'Zinc PCA & Niacinamide', benefit: 'Balances T-zone sebum production and reduces shine throughout the day.', productType: 'Oil-Free Mattifying Gel' },
+        tear_trough: { active: 'Caffeine 5% & Peptide Eye Complex', benefit: 'Helps constrict micro-vessels, reduces fluid accumulation, and supports delicate periorbital skin elasticity.', productType: 'Eye Firming Gel-Cream' },
+        eye_bag: { active: 'Caffeine & Niacinamide Eye Serum', benefit: 'Supports micro-circulation and drainage around the under-eye area to reduce puffiness.', productType: 'De-Puffing Eye Contour Gel' },
+        dark_circle_v2: { active: 'Vitamin C & Kojic Acid Eye Complex', benefit: 'Gently brightens periorbital hyperpigmentation and provides antioxidant defense.', productType: 'Brightening Eye Treatment' },
+        firmness: { active: 'Peptides & Matrixyl 3000', benefit: 'Stimulates collagen synthesis and supports extracellular matrix density for firmer-looking contours.', productType: 'Firming Peptide Serum' },
+        wrinkle: { active: sensitivity === 'retinol-sensitive' ? 'Bakuchiol 1% (Plant-Based Retinol Alternative)' : 'Encapsulated Retinol 0.2-0.5%', benefit: 'Encourages cellular renewal and smooths fine lines and expression wrinkles.', productType: 'Anti-Aging Night Serum' },
+        droopy_lower_eyelid: { active: 'Firming Copper Peptides & Eye Peptides', benefit: 'Supports skin tension and elasticity around the lower eyelid contour.', productType: 'Periorbital Lifting Serum' },
+        droopy_upper_eyelid: { active: 'Peptide & Botanical Firming Complex', benefit: 'Enhances skin firmness and structural support along the upper brow and eyelid area.', productType: 'Brow & Eyelid Firming Cream' },
+        age_spot: { active: 'Vitamin C (L-Ascorbic Acid) 10-15%', benefit: 'Inhibits tyrosinase activity to fade hyperpigmentation and restore luminous clarity.', productType: 'Brightening Antioxidant Serum' },
+        radiance: { active: 'Glycolic Acid (AHA) & Vitamin C', benefit: 'Exfoliates dead surface cells and infuses antioxidants for an immediate glow.', productType: 'Radiance Boosting Essence' }
+      };
+
+      const fallbackRecommendation = {
+        active: 'Gentle Barrier Support & Broad-Spectrum SPF',
+        benefit: 'Nourishes the skin lipid barrier and protects against environmental stress and UV exposure.',
+        productType: 'Daily Protective Moisturizer'
       };
 
       if (!lowest) {
         ingredientContent.innerHTML = `<p style="margin: 0; color: #6b7280;">No valid metric scores available for active ingredient targeting.</p>`;
       } else {
         const lowestScore = getValidScore(lowest);
-        const rec = recommendations[lowest.type] || recommendations.pore;
+        const rec = recommendations[lowest.type] || fallbackRecommendation;
         const sensitivityNote = sensitivity !== 'none' ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #b45309; background: #fef3c7; padding: 6px 10px; border-radius: 6px;">⚠️ <strong>Sensitivity Caution:</strong> Formulated with ${sensitivity === 'retinol-sensitive' ? 'acid-safe alternative actives' : 'extra-gentle barrier support'} to prevent reactivity.</p>` : '';
         const fragranceNote = fragrance === 'fragrance-free' ? ' • 🌿 Fragrance-Free Preference' : '';
         const targetScoreDisplay = lowestScore !== null ? `${lowestScore}/100` : 'N/A';

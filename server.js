@@ -32,7 +32,10 @@ CRITICAL SCORING & SECURITY INSTRUCTIONS:
 const ALLOWED_METRIC_TYPES = new Set([
   'all', 'acne', 'pore', 'oiliness', 'redness', 'texture', 'moisture', 'wrinkle',
   'surface_smoothness', 'pore_refinement', 'sebum_and_oil_balance', 'tone_and_redness',
-  'blemish_and_acne_control', 'firmness_and_elasticity', 'skin_age', 'resize_image'
+  'blemish_and_acne_control', 'firmness_and_elasticity', 'skin_age', 'resize_image',
+  'tear_trough', 'eye_bag', 'dark_circle_v2', 'firmness', 'droopy_lower_eyelid',
+  'droopy_upper_eyelid', 'age_spot', 'radiance', 'skin_type', 'skin_quality',
+  'blemish', 'pigmentation'
 ]);
 const ALLOWED_SKIN_TYPES = new Set(['balanced', 'dry', 'oily', 'combination', 'sensitive']);
 const ALLOWED_CONCERNS = new Set(['glow', 'acne', 'anti-aging', 'hydration', 'texture']);
@@ -92,13 +95,13 @@ function validateInsightsPayload(payload, serverHasApiKey) {
     }
   }
 
-  if (!Array.isArray(metricsToUse) || metricsToUse.length === 0 || metricsToUse.length > 20) {
-    return { valid: false, error: 'Metrics must be a non-empty array of up to 20 items.' };
+  if (!Array.isArray(metricsToUse) || metricsToUse.length === 0 || metricsToUse.length > 30) {
+    return { valid: false, error: 'Metrics must be a non-empty array of up to 30 items.' };
   }
 
   const sanitizedMetrics = [];
   for (const m of metricsToUse) {
-    if (!m || typeof m !== 'object' || typeof m.type !== 'string' || !ALLOWED_METRIC_TYPES.has(m.type)) {
+    if (!m || typeof m !== 'object' || typeof m.type !== 'string' || (!ALLOWED_METRIC_TYPES.has(m.type) && !/^[a-zA-Z0-9_-]{1,50}$/.test(m.type))) {
       return { valid: false, error: `Invalid or unsupported metric type: ${m?.type}` };
     }
     const scoreVal = m.ui_score !== undefined ? m.ui_score : (m.score !== undefined ? m.score : m.raw_score);
@@ -367,44 +370,75 @@ const server = http.createServer(async (req, res) => {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    console.log(`[Image Proxy] Request received. Sanitized Hostname: ${parsedImageUrl.hostname}, Validated: true`);
 
     try {
       const proxyRes = await fetch(imageUrl, {
         method: 'GET',
+        redirect: 'follow',
         signal: controller.signal
       });
       clearTimeout(timeoutId);
 
+      const finalUrlObj = new URL(proxyRes.url);
+      const isFinalHostAllowed = allowedHostPatterns.some(pattern => pattern.test(finalUrlObj.hostname));
+      const redirected = proxyRes.redirected || proxyRes.url !== imageUrl;
+
+      if (finalUrlObj.protocol !== 'https:' || !isFinalHostAllowed) {
+        console.error('[Image Proxy Error] Redirect destination host or protocol not permitted:', finalUrlObj.hostname);
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Forbidden: Redirect destination not permitted.' }));
+        return;
+      }
+
       if (!proxyRes.ok) {
+        console.error(`[Image Proxy Error] Upstream HTTP Status: ${proxyRes.status}`);
         res.writeHead(proxyRes.status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: `Failed to fetch external image (HTTP ${proxyRes.status})` }));
         return;
       }
 
       const contentType = proxyRes.headers.get('content-type') || 'image/jpeg';
-      if (!contentType.startsWith('image/')) {
+      const isAllowedContentType = contentType.startsWith('image/') ||
+        contentType.includes('octet-stream') ||
+        contentType.includes('binary') ||
+        imageUrl.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i);
+
+      if (!isAllowedContentType) {
+        console.error(`[Image Proxy Error] Invalid content-type: ${contentType}`);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid content type returned from remote URL.' }));
         return;
       }
 
+      const finalContentType = contentType.startsWith('image/') ? contentType : 'image/jpeg';
+
       const arrayBuffer = await proxyRes.arrayBuffer();
-      if (arrayBuffer.byteLength > 15 * 1024 * 1024) {
+      const byteCount = arrayBuffer.byteLength;
+      if (byteCount > 15 * 1024 * 1024) {
+        console.error(`[Image Proxy Error] Payload too large: ${byteCount} bytes`);
         res.writeHead(413, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Proxy payload too large (>15MB).' }));
         return;
       }
 
+      console.log(`[Image Proxy Success] Status: ${proxyRes.status}, Redirected: ${redirected}, Content-Type: ${finalContentType}, Bytes: ${byteCount}`);
+
       res.writeHead(200, {
-        'Content-Type': contentType,
+        'Content-Type': finalContentType,
         'Cache-Control': 'no-store, no-cache, must-revalidate'
       });
       res.end(Buffer.from(arrayBuffer));
     } catch (err) {
       clearTimeout(timeoutId);
+      let errorCategory = 'NetworkError';
+      if (err.name === 'AbortError') errorCategory = 'TimeoutError';
+      else if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') errorCategory = 'DNSOrConnectionError';
+      console.error(`[Image Proxy Error] Category: ${errorCategory}, Message: ${err.message}`);
       res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.name === 'AbortError' ? 'Image fetch timed out.' : 'Failed to retrieve image.' }));
+      res.end(JSON.stringify({ error: `Failed to retrieve image (${errorCategory}).` }));
     }
     return;
   }

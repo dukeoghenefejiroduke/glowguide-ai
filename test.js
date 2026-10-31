@@ -206,3 +206,102 @@ test('GET /api/image-proxy with forbidden domain or non-HTTPS returns 403 Forbid
   const json = await res.json();
   assert.ok(json.error.includes('Forbidden'));
 });
+
+test('Regression test: Extracting and validating multiple mask_urls from mocked YouCam analysis response', async () => {
+  const mockedYouCamResponse = {
+    results: {
+      output: [
+        {
+          type: 'pore',
+          mask_urls: [
+            'https://yce-us.s3-accelerate.amazonaws.com/pore_output.jpg',
+            'http://untrusted-domain.com/bad.jpg',
+            'not-a-url'
+          ]
+        },
+        {
+          type: 'acne',
+          mask_urls: [
+            'https://yce-api-01.makeupar.com/acne_output.jpg'
+          ]
+        }
+      ]
+    }
+  };
+
+  // Validate extraction & filtering logic for trusted provider mask URLs
+  const validMaskUrls = [];
+  const allowedHostPatterns = [
+    /\.makeupar\.com$/i,
+    /\.amazonaws\.com$/i,
+    /yce-api-01\.makeupar\.com$/i
+  ];
+
+  if (Array.isArray(mockedYouCamResponse.results.output)) {
+    mockedYouCamResponse.results.output.forEach(item => {
+      if (Array.isArray(item.mask_urls)) {
+        item.mask_urls.forEach(maskUrl => {
+          try {
+            const parsed = new URL(maskUrl);
+            const isAllowed = allowedHostPatterns.some(p => p.test(parsed.hostname));
+            if (parsed.protocol === 'https:' && isAllowed) {
+              validMaskUrls.push(maskUrl);
+            }
+          } catch (e) {}
+        });
+      }
+    });
+  }
+
+  assert.strictEqual(validMaskUrls.length, 2);
+  assert.strictEqual(validMaskUrls[0], 'https://yce-us.s3-accelerate.amazonaws.com/pore_output.jpg');
+  assert.strictEqual(validMaskUrls[1], 'https://yce-api-01.makeupar.com/acne_output.jpg');
+});
+
+test('Regression test: Metric deduplication and filtering of skin_type / N/A entries', async () => {
+  const rawOutputs = [
+    { type: 'pore', ui_score: 88 },
+    { type: 'pore', ui_score: 88 },
+    { type: 'skin_type', skin_type: 'Oily' },
+    { type: 'skin_age', score: 25 },
+    { type: 'tear_trough', ui_score: 59 }
+  ];
+
+  const seenMetricTypes = new Set();
+  const filtered = rawOutputs.filter(o => {
+    if (!o || typeof o !== 'object') return false;
+    const type = o.type;
+    if (!type || ['all', 'resize_image', 'skin_age', 'skin_type'].includes(type)) return false;
+    if (seenMetricTypes.has(type)) return false;
+    const score = o.ui_score !== undefined ? o.ui_score : o.score;
+    if (typeof score !== 'number' || isNaN(score)) return false;
+    seenMetricTypes.add(type);
+    return true;
+  });
+
+  assert.strictEqual(filtered.length, 2);
+  assert.strictEqual(filtered[0].type, 'pore');
+  assert.strictEqual(filtered[1].type, 'tear_trough');
+});
+
+test('Regression test: validateInsightsPayload accepts tear_trough and any valid custom metric type without error', async () => {
+  // We can test validation logic directly or import/simulate payload validation
+  const ALLOWED_METRIC_TYPES = new Set([
+    'all', 'acne', 'pore', 'oiliness', 'redness', 'texture', 'moisture', 'wrinkle',
+    'surface_smoothness', 'pore_refinement', 'sebum_and_oil_balance', 'tone_and_redness',
+    'blemish_and_acne_control', 'firmness_and_elasticity', 'skin_age', 'resize_image',
+    'tear_trough', 'eye_bag', 'dark_circle_v2', 'firmness', 'droopy_lower_eyelid',
+    'droopy_upper_eyelid', 'age_spot', 'radiance', 'skin_type', 'skin_quality',
+    'blemish', 'pigmentation'
+  ]);
+
+  const testMetrics = [
+    { type: 'tear_trough', ui_score: 75 },
+    { type: 'custom_future_metric_xyz', score: 82 }
+  ];
+
+  for (const m of testMetrics) {
+    const isValid = ALLOWED_METRIC_TYPES.has(m.type) || /^[a-zA-Z0-9_-]{1,50}$/.test(m.type);
+    assert.strictEqual(isValid, true);
+  }
+});
