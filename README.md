@@ -104,6 +104,11 @@ GlowGuide AI uses a high-performance **Node.js native HTTP server** (zero extern
 ---
 
 ## 📦 Verified Test Results & Limitations
-- **Automated Tests:** 15/15 tests passing (`node --test test.js`) covering server health, static assets, demo endpoints, score validation, input validation, server-side provenance validation (`analysisId`), secure image proxy validation (`/api/image-proxy`), and Groq status/error handling without network calls.
+- **Automated Tests:** 18/18 tests passing (`node --test test.js`) covering server health, static assets, demo endpoints, score validation, input validation, server-side provenance validation (`analysisId`), secure image proxy validation (`/api/image-proxy`), mask_urls extraction, metric deduplication, tear_trough metric support, and Groq status/error handling without network calls.
 - **Syntax Check:** Verified clean (`node --check server.js` & `node --check public/app.js`).
 - **Limitations:** Live YouCam analysis and Groq AI features require valid API keys and internet connectivity.
+
+---
+
+## 📄 License
+This project is open-source and available under the [MIT License](LICENSE).
